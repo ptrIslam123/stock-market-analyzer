@@ -26,7 +26,8 @@ def parse_info(page_content: str):
         else:
             url = str()
 
-        news_publications[title] = url
+        if len(title) > 0 and len(url) > 0:
+            news_publications[title] = url
 
     return news_publications
 

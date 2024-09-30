@@ -1,11 +1,15 @@
 import time
 import re
 
+from zipfile import error
 from playwright.sync_api import Playwright, sync_playwright, expect
 from bs4 import BeautifulSoup
+import sqlite3
+from datetime import datetime
 
 FINAM_BROWSER_CONTEXT_PATH = "/home/islam/PycharmProjects/stock-market-analyzer/.local/finam_context"
 FINAM_DATA_SET_SOURCES_URL = "https://www.finam.ru/quotes/stocks/russia/"
+STOCK_MARKET_INFO_TABLE_PATH = "/home/islam/PycharmProjects/stock-market-analyzer/database/stock_marker_info_table"
 
 class StockInfo:
     def __init__(self, stock_name, last_deal, price_change_percent, open_price, max_price, min_price, close_price, volume, update_time):
@@ -77,7 +81,6 @@ def parse_info(page_content: str):
     table = soup.find('table', id='finfin-local-plugin-quote-table-table-table')
 
     data = []
-    is_first_row = True
     for row in table.find_all('tr'):
         row_data = []
         for cell in row.find_all(['td', 'th']):
@@ -92,6 +95,110 @@ def parse_info(page_content: str):
 
     data.pop(0)
     return data
+
+def normalize_stock_name(stock_name):
+    normalized_string = str()
+    i = 0
+    while i < len(stock_name):
+        symbol = stock_name[i]
+        if symbol == '\"' or symbol == '\'':
+            i += 1
+            continue
+        elif symbol == '-' or symbol == '+' or symbol == '.':
+            normalized_string += '_'
+        elif symbol == ' ':
+            i += 1
+            continue
+        elif symbol == '(':
+            i += 1
+            while i < len(stock_name) and stock_name[i] != ')':
+                i += 1
+        else:
+            normalized_string += symbol
+        i += 1
+    return normalized_string
+
+def save_to_db(stock_info_data_list, table_path: str):
+    conn = sqlite3.connect(table_path + ".db")
+    cursor = conn.cursor()
+
+    stocks_name_table = "STOCK_NAMES"
+
+    update_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    for stock_info_data in stock_info_data_list:
+        data = stock_info_data.to_dict()
+        stock_name = normalize_stock_name(data["stock_name"])
+
+        create_stock_name_table_sql_re = f"""
+            CREATE TABLE IF NOT EXISTS {stocks_name_table} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stock_name TEXT NOT NULL,
+                real_stock_name TEXT NOT NULL
+            );
+        """.format(stocks_name_table=stocks_name_table)
+
+        create_stocks_data_info_table_sql_req = """
+            CREATE TABLE IF NOT EXISTS {stock_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stock_name TEXT NOT NULL,
+                last_deal REAL,
+                price_change_percent REAL,
+                open_price REAL,
+                max_price REAL,
+                min_price REAL,
+                close_price REAL,
+                volume INTEGER,
+                update_time TEXT
+            );
+        """.format(stock_name=stock_name)
+
+        try:
+            cursor.execute(create_stocks_data_info_table_sql_req)
+        except Exception as e:
+            print(f"CREATE/OPEN SQL TABLE ERROR(table_name={stock_name}): {error}".format(stock_name=data["stock_name"], error=str(e)))
+            return
+
+        try:
+            cursor.execute(create_stock_name_table_sql_re)
+        except Exception as e:
+            print(f"CREATE/OPEN SQL TABLE ERROR(table_name={stocks_name_table}): {error}".format(stocks_name_table=stocks_name_table, error=str(e)))
+            return
+
+        insert_stocks_data_sql = f"""
+            INSERT INTO {stock_name} (stock_name, last_deal, price_change_percent, open_price, max_price, min_price, close_price, volume, update_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """.format(stock_name=stock_name)
+
+        insert_stocks_name_sql = f"""
+            INSERT INTO {stocks_name_table} (stock_name, real_stock_name)
+            VALUES (?, ?);
+        """.format(stocks_name_table=stocks_name_table)
+
+        try:
+            cursor.execute(insert_stocks_data_sql, (
+                data["stock_name"],
+                data["last_deal"],
+                data["price_change_percent"],
+                data["open_price"],
+                data["max_price"],
+                data["min_price"],
+                data["close_price"],
+                data["volume"],
+                update_time
+            ))
+            conn.commit()
+        except Exception as e:
+            print(f"INSERT INTO SQL TABLE ERROR(table_name={stock_name}): {error}".format(stock_name=stock_name, error=str(e)))
+            return
+
+        try:
+            cursor.execute(insert_stocks_name_sql, (stock_name, data["stock_name"]))
+            conn.commit()
+        except Exception as e:
+            print(f"INSERT INTO SQL TABLE ERROR(table_name={stocks_name_table}): {error}".format(stocks_name_table=stocks_name_table, error=str(e)))
+            return
+
+    conn.close()
 
 def run(playwright: Playwright) -> None:
     browser = playwright.chromium.launch(headless=False)
@@ -112,8 +219,9 @@ def run(playwright: Playwright) -> None:
         if len(data) == 0:
             continue
         else:
-            for d in data:
-                print(d)
+            save_to_db(data, STOCK_MARKET_INFO_TABLE_PATH)
+            break
+
 
     # ---------------------
     context.close()
