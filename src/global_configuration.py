@@ -1,8 +1,8 @@
 import os
 
-FINAM_RUSSIAN_SHARE_DATA_SET_SOURCES_URL = "https://www.finam.ru/quotes/stocks/russia/"
-FINAM_URL = "https://www.finam.ru/"
-
+FINAM_RUSSIAN_SHARE_DATA_SET_SOURCES_URL="https://www.finam.ru/quotes/stocks/russia/"
+FINAM_URL="https://www.finam.ru/"
+SMART_LAB_NEWS_URL="https://smartlab.news/"
 
 ROOT_PATH = f"{os.path.dirname(os.path.abspath(__file__))}/.."
 FINAM_BROWSER_CONTEXT_PATH = f"{ROOT_PATH}/.local/finam_context"
