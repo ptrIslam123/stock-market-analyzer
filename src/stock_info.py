@@ -1,76 +1,106 @@
+import logging
 import sqlite3
+import datetime
 
 class StockInfo:
-    def __init__(self, name: str, ticker: str,
-                 last_price: float, price_change_percent: float,
-                 open_price: float, close_price: float, volume: int,
-                 update_time: str):
-        self.name = name                                        # Инструмент
-        self.ticker = ticker                                    # Тикер инструмента
+    def __init__(self, ticker: str, last_price: float, last_volume: int):
         self.last_price = last_price                            # Последняя цена
-        self.price_change_percent = price_change_percent        # Изменение цен в %
-        self.open_price = open_price                            # Цена открытия
-        self.close_price = close_price                          # Цена закрытия
-        self.volume = volume                                    # Объемы, штуки
-        self.update_time = update_time                          # Время обновления
+        self.last_volume = last_volume                          # Объемы на текущий момент времени, в штуках
+        self.date = self.get_current_date()
+        self.time = self.get_current_time()
         self.table_name = self.get_table_name(ticker)
 
     def __repr__(self) -> str:
-        return (f"StockInfo(stock_name={self.name}, "
-                f"stock_ticker={self.ticker}, "
+        return (f"StockInfo(table_name={self.table_name}, "
                 f"last_deal={self.last_price}, "
-                f"price_change_percent={self.price_change_percent}, "
-                f"open_price={self.open_price}, "
-                f"close_price={self.close_price}, "
-                f"volume={self.volume}, "
-                f"update_time={self.update_time})")
+                f"last_volume={self.last_volume}, "
+                f"date={self.date}, "
+                f"time={self.time})")
 
-    def create_table(self, cursor) -> bool:
+    def create_table(self, cursor: sqlite3.Cursor) -> bool:
         try:
             cursor.execute(self.__create_table_sql_re())
             return True
         except Exception as e:
-            print(f"CREATE TABLE={self.ticker} SQL REQ ERROR: {str(e)}")
+            logging.error(f"CREATE TABLE={self.table_name} SQL REQ ERROR: {str(e)}")
             return False
 
-    def insert(self, cursor, conn) -> bool:
+    def insert(self, cursor: sqlite3.Cursor, conn: sqlite3.Connection) -> bool:
         try:
             cursor.execute(self.__insert_into_table_sql_req(),
                 (
-                    self.name,
                     self.last_price,
-                    self.price_change_percent,
-                    self.open_price,
-                    self.close_price,
-                    self.volume,
-                    self.update_time
+                    self.last_volume,
+                    self.date,
+                    self.time,
                 )
             )
             conn.commit()
             return True
         except Exception as e:
-            print(f"INSERT INTO TABLE={self.ticker} SQL REQ ERROR: {str(e)}")
+            logging.error(f"INSERT INTO TABLE={self.table_name} SQL REQ ERROR: {str(e)}")
             return False
+
+    @staticmethod
+    def get_last_records_from(cursor: sqlite3.Cursor, table_name: str, from_date: str) -> list:
+        try:
+            cursor.execute(StockInfo.__get_last_records(table_name=table_name), (from_date,))
+            return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"SELECT TABLE={table_name} SQL REQ ERROR: {str(e)}")
+            return list()
+
+    @staticmethod
+    def get_records_from(cursor: sqlite3.Cursor, table_name: str, from_date: str, to_date: str):
+        try:
+            cursor.execute(StockInfo.__get_records(table_name=table_name), (from_date,))
+            return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"SELECT TABLE={table_name} SQL REQ ERROR: {str(e)}")
+            return list()
 
     def __create_table_sql_re(self) -> str:
         return """CREATE TABLE IF NOT EXISTS {table} (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        stock_name TEXT NOT NULL,
                         last_price REAL,
-                        price_change_percent REAL,
-                        open_price REAL,
-                        close_price REAL,
-                        volume INTEGER,
-                        update_time TEXT
+                        last_volume INTEGER,
+                        date TEXT,
+                        time TEXT
                     );
         """.format(table=self.table_name)
 
     def __insert_into_table_sql_req(self) -> str:
-        return """INSERT INTO {table} (stock_name, last_price, price_change_percent, open_price, close_price, volume, update_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+        return """INSERT INTO {table} (last_price, last_volume, date, time)
+                VALUES (?, ?, ?, ?);
             """.format(table=self.table_name)
 
-    def get_table_name(self, ticker: str) -> str:
+    @staticmethod
+    def __get_last_records(table_name: str) -> str:
+        return f"""
+            SELECT * 
+            FROM {table_name} 
+            WHERE date >= ?;
+        """
+
+    @staticmethod
+    def __get_records(table_name: str) -> str:
+        return f"""
+            SELECT * 
+            FROM {table_name} 
+            WHERE date BETWEEN ? AND ?;
+        """
+
+    @staticmethod
+    def get_current_date():
+        """Возвращает текущую дату в формате YYYY-MM-DD."""
+        return datetime.datetime.now().strftime('%Y-%m-%d')
+
+    @staticmethod
+    def get_current_time():
+        """Возвращает текущее время в формате HH:MM:SS."""
+        return datetime.datetime.now().strftime('%H:%M:%S')
+
+    @staticmethod
+    def get_table_name(ticker: str) -> str:
         return ticker.replace('-', '_')
 
 

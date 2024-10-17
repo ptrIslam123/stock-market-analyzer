@@ -5,7 +5,7 @@ from typing import Optional
 
 from playwright.sync_api import Playwright, sync_playwright, expect
 from bs4 import BeautifulSoup
-from global_configuration import *
+from global_configuration import SMART_LAB_NEWS_URL
 
 def extract_title_and_url(news) -> Optional[tuple]:
     link = news.find('a')

@@ -1,4 +1,5 @@
 import os
+import logging
 
 FINAM_RUSSIAN_SHARE_DATA_SET_SOURCES_URL="https://www.finam.ru/quotes/stocks/russia/"
 FINAM_URL="https://www.finam.ru/"
@@ -11,3 +12,12 @@ INTRADAY_STOCK_MARKET_INFO_TABLE_PATH=f"{ROOT_PATH}/database/intraday_stock_mark
 TINKOFF_API_TOKEN_PATH=f"{ROOT_PATH}/.local/tinkoff_read_only_token"
 
 RUSSIAN_SHARE_CLASS_CODE="TQBR"
+
+LOG_FILE_PATH=f"{ROOT_PATH}/log/log.txt"
+
+logging.basicConfig(
+    filename=LOG_FILE_PATH,
+    filemode='w',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG
+)

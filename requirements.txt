@@ -1,3 +1,8 @@
 playwright
 BeautifulSoup4
 tinkoff-investments
+
+pandas
+numpy
+tensorflow
+keras

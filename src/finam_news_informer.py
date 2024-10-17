@@ -4,7 +4,7 @@ import argparse
 
 from playwright.sync_api import Playwright, sync_playwright, expect
 from bs4 import BeautifulSoup
-from global_configuration import *
+from global_configuration import FINAM_BROWSER_CONTEXT_PATH, FINAM_URL
 
 def parse_info(page_content: str):
     soup = BeautifulSoup(page_content, 'html.parser')
