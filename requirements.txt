@@ -1,6 +1,8 @@
 playwright
 BeautifulSoup4
 tinkoff-investments
+pytest
+psycopg2
 
 pandas
 numpy

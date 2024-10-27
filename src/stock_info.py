@@ -1,5 +1,4 @@
 import logging
-import sqlite3
 import datetime
 
 class StockInfo:
@@ -17,7 +16,7 @@ class StockInfo:
                 f"date={self.date}, "
                 f"time={self.time})")
 
-    def create_table(self, cursor: sqlite3.Cursor) -> bool:
+    def create_table(self, cursor) -> bool:
         try:
             cursor.execute(self.__create_table_sql_re())
             return True
@@ -25,7 +24,7 @@ class StockInfo:
             logging.error(f"CREATE TABLE={self.table_name} SQL REQ ERROR: {str(e)}")
             return False
 
-    def insert(self, cursor: sqlite3.Cursor, conn: sqlite3.Connection) -> bool:
+    def insert(self, cursor, conn) -> bool:
         try:
             cursor.execute(self.__insert_into_table_sql_req(),
                 (
@@ -42,7 +41,26 @@ class StockInfo:
             return False
 
     @staticmethod
-    def get_last_records_from(cursor: sqlite3.Cursor, table_name: str, from_date: str) -> list:
+    def delete_table(cursor, conn, table_name: str) -> bool:
+        try:
+            cursor.execute(StockInfo.__delete_table_sql_req(table_name))
+            conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"DROP TABLE={table_name} SQL REQ ERROR: {str(e)}")
+            return False
+
+    @staticmethod
+    def get_all_records(cursor, table_name: str) -> list:
+        try:
+            cursor.execute(f"""SELECT * FROM {table_name};""")
+            return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"SELECT TABLE={table_name} SQL REQ ERROR: {str(e)}")
+            return list()
+
+    @staticmethod
+    def get_last_records_from(cursor, table_name: str, from_date: str) -> list:
         try:
             cursor.execute(StockInfo.__get_last_records(table_name=table_name), (from_date,))
             return cursor.fetchall()
@@ -51,7 +69,7 @@ class StockInfo:
             return list()
 
     @staticmethod
-    def get_records_from(cursor: sqlite3.Cursor, table_name: str, from_date: str, to_date: str):
+    def get_records_from(cursor, table_name: str, from_date: str, to_date: str) -> list:
         try:
             cursor.execute(StockInfo.__get_records(table_name=table_name), (from_date,))
             return cursor.fetchall()
@@ -59,27 +77,64 @@ class StockInfo:
             logging.error(f"SELECT TABLE={table_name} SQL REQ ERROR: {str(e)}")
             return list()
 
+    @staticmethod
+    def get_first_n_records(cursor, table_name: str, n: int) -> list:
+        try:
+            cursor.execute(StockInfo.__get_first_n_records(table_name=table_name), (n,))
+            return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"SELECT TABLE={table_name} SQL REQ ERROR: {str(e)}")
+            return list()
+
+    @staticmethod
+    def get_all_tickers(cursor) -> list:
+        try:
+            cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+            tables = cursor.fetchall()
+            return [table[0] for table in tables]
+        except Exception as e:
+            logging.error(f"SELECT ALL TABLES: SQL REQ ERROR: {str(e)}")
+            return list()
+
+    @staticmethod
+    def normalize(cursor, conn, table_name: str, date_threshold: str) -> bool:
+        try:
+            cursor.execute(f"""DELETE FROM {table_name} WHERE date < %s;""", (date_threshold,))
+            conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"DELETE FROM {table_name}: SQL REQ ERROR: {str(e)}")
+            return False
+
     def __create_table_sql_re(self) -> str:
-        return """CREATE TABLE IF NOT EXISTS {table} (
+        return f"""CREATE TABLE IF NOT EXISTS {self.table_name} (
                         last_price REAL,
-                        last_volume INTEGER,
-                        date TEXT,
-                        time TEXT
+                        last_volume BIGINT,
+                        date DATE,
+                        time TIME
                     );
-        """.format(table=self.table_name)
+        """
 
     def __insert_into_table_sql_req(self) -> str:
-        return """INSERT INTO {table} (last_price, last_volume, date, time)
-                VALUES (?, ?, ?, ?);
-            """.format(table=self.table_name)
+        return f"""INSERT INTO {self.table_name} (last_price, last_volume, date, time)
+                VALUES (%s, %s, %s, %s);
+            """
+
+    @staticmethod
+    def __delete_table_sql_req(table_name: str) -> str:
+        return f"""DROP TABLE IF EXISTS {table_name} CASCADE;"""
 
     @staticmethod
     def __get_last_records(table_name: str) -> str:
         return f"""
             SELECT * 
             FROM {table_name} 
-            WHERE date >= ?;
+            WHERE date >= %s;
         """
+
+    @staticmethod
+    def __get_first_n_records(table_name: str) -> str:
+        return f"""SELECT * FROM {table_name} LIMIT %s;"""
 
     @staticmethod
     def __get_records(table_name: str) -> str:
@@ -104,3 +159,6 @@ class StockInfo:
         return ticker.replace('-', '_')
 
 
+def delete_all_tables(cursor, conn):
+    for ticker in StockInfo.get_all_tickers(cursor):
+        StockInfo.delete_table(cursor, conn, ticker)

@@ -2,8 +2,6 @@ import logging
 import re
 
 from bs4 import BeautifulSoup
-from tensorflow.python.data.ops.optional_ops import Optional
-
 from stock_info import StockInfo
 
 class FinalStocksInfoParser:
