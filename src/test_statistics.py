@@ -1,72 +1,173 @@
-from statistics import *
-from datetime import datetime
+import pytest
 
-def test_make_statistics_for_hours():
-    data = [
-        # last_price, last_volume, date, time
-        (56.0, 1000.0, '2024-10-17', '15:04:05'),
+from src.statistics import AggregatedStatistic, Statistics
 
-        (56.0, 1000.0, '2024-10-17', '16:04:05'),
+def make_stat(test_prices: list[float], test_volumes: list[int]) -> Statistics:
+    test_date = '2024-11-01'
+    tes_time = '10:15:29'
+    test_ticker = "ticker_X"
+    assert len(test_prices) == len(test_volumes)
 
-        (56.0, 1000.0, '2030-10-17', '17:04:05'),
-        (56.0, 1000.0, '2024-10-17', '17:06:05'),
+    test_records: list[tuple] = list()
+    for i in range(0, len(test_prices)):
+        test_records.append(
+            (test_prices[i], test_volumes[i], test_date, tes_time)
+        )
 
-        (56.0, 1000.0, '2025-10-17', '18:04:05'),
-        (56.0, 1000.0, '2027-10-17', '18:07:05'),
-        (56.0, 1000.0, '2024-10-17', '18:08:05')
+    return Statistics(test_ticker, test_records)
+
+def calculate_mean(data: list) -> (list[float], float):
+    expect_data_deltas_in_percent = [abs(data[i] - data[i - 1]) * 100 / data[i - 1] for i in range(1, len(data))]
+    expect_absolute_mean_data_in_percent = sum(expect_data_deltas_in_percent) / len(expect_data_deltas_in_percent)
+    return expect_data_deltas_in_percent, expect_absolute_mean_data_in_percent
+
+def calculate_mean_absolute_deviation(data_delta: list, mean: float) -> float:
+    abs_delta: list[float] = [abs(x - mean) for x in data_delta]
+    mad = sum(abs_delta) / len(data_delta)
+    return mad
+
+
+
+def test_statistics_class():
+    test_prices: list[float] = [
+        10.0, 12.0, 13.0, 17.0, 13.0, 9.0, 8.0, 9.0, 9.0, 10.0
+    ]
+    test_volumes: list[int] = [
+        100, 110, 115, 145, 150, 160, 162, 170, 172, 175
     ]
 
-    df = sql_rows_to_pandas_data_frames(data)
-    hours = Statistics.make_statistics_for_hours('X', df)
-    assert len(hours) == 4
+    test_stat = make_stat(test_prices, test_volumes)
 
-    prev_time = None
-    for hour in hours:
-        hour_fd = hour.get_df()
-        assert 'time' in hour_fd.columns
+    expect_prices_delta, expect_absolute_mean_price_in_percent = calculate_mean(test_prices)
+    expect_volumes_delta, expect_absolute_mean_volume_in_percent = calculate_mean(test_volumes)
 
-        current_time = datetime.strptime(hour_fd.loc[hour_fd.index[0], 'time'], '%H:%M:%S').time()
-        if prev_time:
-            current_datetime = datetime.combine(datetime(2000, 1, 1), current_time)
-            prev_datetime = datetime.combine(datetime(2000, 1, 1), prev_time)
+    expect_price_mad_in_percent = calculate_mean_absolute_deviation(expect_prices_delta, expect_absolute_mean_price_in_percent)
+    expect_volume_mad_in_percent = calculate_mean_absolute_deviation(expect_volumes_delta, expect_absolute_mean_volume_in_percent)
 
-            diff = current_datetime - prev_datetime
+    assert test_stat.absolute_mean_price_in_percent == pytest.approx(expect_absolute_mean_price_in_percent)
+    assert test_stat.absolute_mean_volume_in_percent == pytest.approx(expect_absolute_mean_volume_in_percent)
 
-            diff_in_hours = diff.total_seconds() / 3600
+    assert test_stat.price_mad_in_percent == pytest.approx(expect_price_mad_in_percent)
+    assert test_stat.volume_mad_in_percent == pytest.approx(expect_volume_mad_in_percent)
 
-            assert 1 <= diff_in_hours <= 24
-
-        prev_time = current_time
-
-
-def test_make_statistics_for_days():
-    data = [
-        # last_price, last_volume, date, time
-        (56.0, 1000.0, '2024-10-10', '15:04:05'),
-        (56.0, 1000.0, '2024-10-10', '16:04:05'),
-
-        (56.0, 1000.0, '2024-10-17', '17:04:05'),
-
-        (56.0, 1000.0, '2024-10-18', '17:06:05'),
-        (56.0, 1000.0, '2024-10-18', '18:04:05'),
-        (56.0, 1000.0, '2024-10-18', '18:07:05'),
-
-        (56.0, 1000.0, '2024-10-23', '18:08:05')
+def test_absolute_mean_metrics_sensitivity_1():
+    # цены за данный timeframe слабо изменялись(слабая волатильность)
+    test_prices_X = [
+        10.0, 10.0, 10.0, 10.0, 10.0, 9.0, 8.0, 9.0, 9.0, 10.0
     ]
+    test_volumes_X = [
+        100, 115, 116, 145, 150, 160, 162, 167, 170, 175
+    ]
+    test_stat_X = make_stat(test_prices_X, test_volumes_X)
 
-    df = sql_rows_to_pandas_data_frames(data)
-    days = Statistics.make_statistics_for_days('X', df)
-    assert len(days) == 4
+    # цены за данный timeframe слабо изменялись(слабая волатильность)
+    test_prices_Y = [
+        10.0, 10.0, 9.0, 9.0, 9.0, 9.0, 9.0, 8.0, 8.0, 8.0
+    ]
+    test_volumes_Y = [
+        100, 110, 115, 145, 150, 160, 162, 170, 172, 175
+    ]
+    test_stat_Y = make_stat(test_prices_Y, test_volumes_Y)
 
-    prev_day = None
-    for day in days:
-        day_df = day.get_df()
-        assert 'date' in day_df.columns
+    """
+    Исходя из данных мы можем сделать вывод, что бумага X более волатильная чем бумага Y
+    """
+    assert test_stat_X.absolute_mean_price_in_percent > test_stat_Y.absolute_mean_price_in_percent
+    """"
+    тоже самое можно сказать и про средни темпы изменения объемов, волатильность объемов бумаги X большее чем Y 
+    """
+    assert test_stat_X.absolute_mean_volume_in_percent > test_stat_Y.absolute_mean_volume_in_percent
 
-        current_day = datetime.strptime(day_df.loc[day_df.index[0], 'date'], '%Y-%m-%d').date()
-        if prev_day:
-            diff = current_day - prev_day
-            diff_in_days = diff.days
-            assert diff_in_days >= 1 and diff_in_days <= 365
+def test_absolute_mean_metrics_sensitivity_2():
+    # цены за данный timeframe слаба изменялись(слабая волатильность)
+    test_prices_X = [
+        100.0, 100.0, 102.0, 103.0, 103.0, 103.0, 102.0, 103.0, 103.0, 103.0
+    ]
+    test_volumes_X = [
+        1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
+    ]
+    test_stat_X = make_stat(test_prices_X, test_volumes_X)
 
-        prev_day = current_day
+    # цены за данный timeframe слаба изменялись(слабая волатильность)
+    test_prices_Y = [
+        1000.0, 1005.0, 1020.0, 1035.0, 1030.0, 1032.0, 1021.0, 1033.0, 1030.0, 1030.0
+    ]
+    test_volumes_Y = [
+        1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000
+    ]
+    test_stat_Y = make_stat(test_prices_Y, test_volumes_Y)
+
+    """
+    Исходя из данных мы можем сделать вывод, что бумага Y более волатильная чем бумага X, но при этом
+    разница в волатильности минимальна, так как несмотря на больше значение изменения бумаги Y в абсолютных
+    значениях, но в относительных они одного порядка приблизительно, что мы и должны наблюдать
+    """
+    assert test_stat_Y.absolute_mean_price_in_percent > test_stat_X.absolute_mean_price_in_percent
+
+def test_absolute_mean_metrics_sensitivity_3():
+    # цены за данный timeframe слаба изменялись(слабая волатильность)
+    test_prices_X = [
+        100.0, 117.0, 120.0, 156.0, 160.0, 133.0, 115.0, 167.0, 188.0, 118.0, 113.0, 145.0, 156.0, 120.0, 111.0, 110.0,
+    ]
+    test_volumes_X = [
+        100, 110, 115, 145, 150, 160, 162, 170, 172, 175, 200, 200, 200, 200, 200, 200,
+    ]
+    test_stat_X = make_stat(test_prices_X, test_volumes_X)
+
+    # цены за данный timeframe слаба изменялись(слабая волатильность)
+    test_prices_Y = [
+        100.0, 100.0, 102.0, 103.0, 103.0, 103.0, 102.0, 103.0, 103.0, 103.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0,
+    ]
+    test_volumes_Y = [
+        100, 110, 115, 145, 150, 160, 162, 170, 172, 175, 200, 200, 200, 200, 200, 200,
+    ]
+    test_stat_Y = make_stat(test_prices_Y, test_volumes_Y)
+
+    """
+    Несмотря на то что по общему взгляду кажется что бумагу X сильно колбасит(большая волатильность) но средне 
+    изменение цены около 16%(что довольно маловато на мой взгляд) но не все так плохо, в сравнении этой метрики
+    со значением бумаги Y то действительно видно что бумага X значительнее подвержана волатильности. Из чего
+    можно сделать вывод что эти метрики не совсем хорошо информативны в абсолютных значениях, но крайне хороши в 
+    сравнении с аналогичными метриками других бумаг
+    """
+    assert test_stat_X.absolute_mean_price_in_percent > test_stat_Y.absolute_mean_price_in_percent
+
+
+
+# def test_aggregated_stat_class():
+#     test_prices_X = [
+#         10.0, 12.0, 13.0, 17.0, 13.0, 9.0, 8.0, 9.0, 9.0, 10.0
+#     ]
+#     test_volumes_X = [
+#         100, 110, 115, 145, 150, 160, 162, 170, 172, 175
+#     ]
+#     test_stat_X = make_stat(test_prices_X, test_volumes_X)
+#
+#
+#     test_prices_Y = [
+#         20.0, 21.0, 25.0, 25.0, 24.0, 22.0, 22.0, 23.0, 23.0, 22.0
+#     ]
+#     test_volumes_Y = [
+#         200, 210, 235, 345, 350, 460, 562, 770, 772, 775
+#     ]
+#     test_stat_Y = make_stat(test_prices_Y, test_volumes_Y)
+#
+#
+#     test_prices_Z = [
+#         1000.0, 1010.0, 1025.0, 1067.0, 1100.0, 1200.0, 1050.0, 999.0, 980.0, 985.0
+#     ]
+#     test_volumes_Z = [
+#         3000, 3010, 3035, 3045, 3100, 3600, 4620, 4700, 4802, 5705
+#     ]
+#     test_stat_Z = make_stat(test_prices_Z, test_volumes_Z)
+#
+#     test_stat_list = [test_stat_X, test_stat_Y, test_stat_Z]
+#
+#     aggregated_stat = AggregatedStatistic()
+#     for test_ticker_stat in test_stat_list:
+#         aggregated_stat.use_day_stat(test_ticker_stat)
+#
+#     aggregated_stat.complete_calculation()
+#
+#     print("\n")
+

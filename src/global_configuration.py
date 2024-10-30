@@ -27,6 +27,12 @@ logging.basicConfig(
     level=logging.DEBUG
 )
 
+TABLE_FOR_10_SEC_PREFIX='for_10_sec'
+TABLE_FOR_5_MIN_PREFIX='for_5_min'
+TABLE_FOR_30_MIN_PREFIX='for_30_min'
+TABLE_FOR_1_HOUR_PREFIX='for_1_hour'
+TABLE_FOR_5_HOUR_PREFIX='for_5_hour'
+
 def get_postgresql_config() -> dict:
     with open(POSTGRESQL_CONFIG_PATH, 'r', encoding='utf-8') as file:
         config_data = json.load(file)
